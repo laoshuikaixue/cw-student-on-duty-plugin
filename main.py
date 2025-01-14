@@ -24,8 +24,12 @@ class Plugin(PluginBase):  # 插件类
 
         logger.debug("Loading duty_list.json data.")
         # 加载 duty_list.json 数据
-        with open(f'{self.PATH}/duty_list.json', 'r', encoding='utf-8') as f:
-            self.duty_list = json.load(f)
+        try:
+            with open(f'{self.PATH}/duty_list.json', 'r', encoding='utf-8') as f:
+                self.duty_list = json.load(f)
+        except FileNotFoundError:
+            logger.error("duty_list.json not found. Please set duty data!")
+            self.duty_list = []
 
         self.duty_label = None  # 初始化 duty_label 属性
         logger.debug("Plugin initialized.")
@@ -57,7 +61,10 @@ class Plugin(PluginBase):  # 插件类
 
             # 查找当前组别的值日生信息
             duty_info = [d['name'] for d in self.duty_list if d['group'] == group]
-            duty_names = '  ' + ' '.join(duty_info).strip() if duty_info else '无值日生'
+            if not duty_info:
+                duty_names = '  请先设置值日生数据！'
+            else:
+                duty_names = '  ' + ' '.join(duty_info).strip()
 
             # 更新小组件标题和内容
             widget_title = '今日值日生 | LaoShui'
@@ -98,8 +105,12 @@ class Settings(SettingsBase):
     def load_group_options(self):
         logger.debug("Loading group options from duty_list.json.")
         # 从 duty_list.json 读取组别选项
-        with open(f'{self.PATH}/duty_list.json', 'r', encoding='utf-8') as f:
-            duty_list = json.load(f)
+        try:
+            with open(f'{self.PATH}/duty_list.json', 'r', encoding='utf-8') as f:
+                duty_list = json.load(f)
+        except FileNotFoundError:
+            logger.error("duty_list.json not found. Please set duty data!")
+            duty_list = []
 
         groups = sorted(set(d['group'] for d in duty_list))  # 获取所有组别，并去重排序
         self.groupComboBox.addItems(groups)  # 添加组别选项

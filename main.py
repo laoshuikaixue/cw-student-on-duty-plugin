@@ -1,9 +1,11 @@
 import json
 
 from PyQt5 import uic
+from PyQt5.QtCore import QUrl
+from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import QHBoxLayout, QLabel
 from loguru import logger
-from qfluentwidgets import ComboBox
+from qfluentwidgets import ComboBox, PrimaryPushButton
 
 from .ClassWidgets.base import PluginBase, SettingsBase, PluginConfig
 
@@ -82,7 +84,16 @@ class Settings(SettingsBase):
         self.groupComboBox.setCurrentText(self.cfg['group'])
         self.groupComboBox.currentIndexChanged.connect(
             lambda: self.cfg.upload_config('group', self.groupComboBox.currentText()))
+
+        self.openWebButton = PrimaryPushButton('打开值日生编辑器', self)
+        self.openWebButton.clicked.connect(self.open_web_editor)
+        self.verticalLayout.addWidget(self.openWebButton)
+
         logger.debug("Settings initialized.")
+
+    def open_web_editor(self):
+        web_path = QUrl.fromLocalFile(f'{self.PATH}/web/index.html').toString()
+        QDesktopServices.openUrl(QUrl(web_path))
 
     def load_group_options(self):
         logger.debug("Loading group options from duty_list.json.")

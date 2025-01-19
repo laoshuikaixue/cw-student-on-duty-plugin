@@ -3,7 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function loadStudentList() {
-    fetch('student_list.txt')
+    fetch('./student_list.txt')
         .then(response => response.text())
         .then(data => {
             const students = data.split('\n').map(name => name.trim()).filter(name => name);

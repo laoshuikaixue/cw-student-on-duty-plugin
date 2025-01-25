@@ -1,11 +1,17 @@
+import http.server
 import json
+import socketserver
+from threading import Event
 
 from PyQt5 import uic
-from PyQt5.QtCore import QUrl, pyqtSignal, QPropertyAnimation, QEasingCurve, QTimer, Qt
+from PyQt5.QtCore import QPropertyAnimation, QEasingCurve, QTimer
+from PyQt5.QtCore import QUrl, pyqtSignal, QThread, Qt
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import QHBoxLayout, QLabel, QScrollBar, QScrollArea, QWidget, QVBoxLayout
 from loguru import logger
-from qfluentwidgets import ComboBox, PrimaryPushButton, isDarkTheme
+from qfluentwidgets import ComboBox, PrimaryPushButton, InfoBar, InfoBarPosition
+from qfluentwidgets import isDarkTheme
+
 from .ClassWidgets.base import SettingsBase, PluginConfig, PluginBase
 
 # 自定义小组件
@@ -180,10 +186,65 @@ class Plugin(PluginBase):
         logger.success('Duty Plugin executed!')
 
 
+class ServerThread(QThread):
+    """用于在后台运行HTTP服务器的线程"""
+    server_started = pyqtSignal(int)  # 参数为端口号
+    port_conflict = pyqtSignal(int)  # 参数为冲突的端口号
+    error_occurred = pyqtSignal(str)  # 参数为错误信息
+
+    def __init__(self, port, path):
+        super().__init__()
+        self.port = port
+        self.path = path
+        self.stop_flag = Event()
+        self.handler = None
+        self.httpd = None
+
+    def run(self):
+        """尝试启动服务器，遇到冲突时递增端口"""
+        max_attempts = 100  # 最大尝试端口数量
+        for attempt in range(max_attempts):
+            if self.stop_flag.is_set():
+                return
+
+            try:
+                # 使用自定义请求处理程序
+                self.handler = lambda *args: http.server.SimpleHTTPRequestHandler(
+                    *args, directory=self.path
+                )
+                self.httpd = socketserver.TCPServer(("", self.port), self.handler)
+                self.server_started.emit(self.port)
+                self.httpd.serve_forever()
+                break
+            except OSError as e:
+                if e.errno == 48 or "Address already in use" in str(e):
+                    self.port_conflict.emit(self.port)
+                    self.port += 1
+                else:
+                    self.error_occurred.emit(f"启动服务器失败: {str(e)}")
+                    break
+            except Exception as e:
+                self.error_occurred.emit(f"未知错误: {str(e)}")
+                break
+        else:
+            self.error_occurred.emit("无法找到可用端口 (8900-9000)")
+
+    def stop(self):
+        """安全停止服务器"""
+        if self.httpd:
+            self.httpd.shutdown()
+            self.httpd.server_close()
+        self.stop_flag.set()
+
+
 class Settings(SettingsBase):
     def __init__(self, plugin_path, parent=None):
         super().__init__(plugin_path, parent)
-        uic.loadUi(f'{self.PATH}/settings.ui', self)  # 加载设置界面
+        uic.loadUi(f'{self.PATH}/settings.ui', self)
+
+        # 服务器相关状态
+        self.server_thread = None
+        self.current_port = None
 
         default_config = {"group": "1"}
         self.cfg = PluginConfig(self.PATH, 'config.json')
@@ -202,8 +263,63 @@ class Settings(SettingsBase):
         logger.debug("Settings initialized.")
 
     def open_web_editor(self):
-        web_path = QUrl.fromLocalFile(f'{self.PATH}/web/index.html').toString()
-        QDesktopServices.openUrl(QUrl(web_path))
+        """处理打开网页编辑器的逻辑"""
+        if self.server_thread and self.server_thread.isRunning():
+            self.show_server_info()
+            return
+
+        # 初始化服务器线程
+        self.server_thread = ServerThread(port=8900, path=f"{self.PATH}/web")
+        self.server_thread.server_started.connect(self.on_server_start)
+        self.server_thread.port_conflict.connect(self.on_port_conflict)
+        self.server_thread.error_occurred.connect(self.on_server_error)
+        self.server_thread.start()
+
+    def on_server_start(self, port):
+        """服务器成功启动时的处理"""
+        self.current_port = port
+        self.show_server_info()
+        QDesktopServices.openUrl(QUrl(f"http://localhost:{port}"))
+
+    @staticmethod
+    def on_port_conflict(port):
+        """端口冲突时的处理"""
+        logger.warning(f"端口 {port} 被占用，尝试 {port + 1}")
+
+    def on_server_error(self, msg):
+        """服务器错误处理"""
+        InfoBar.error(
+            title='服务器启动失败',
+            content=msg,
+            orient=Qt.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=3000,
+            parent=self
+        )
+
+    def show_server_info(self):
+        """显示服务器状态信息"""
+        if not self.current_port:
+            return
+
+        InfoBar.success(
+            title='服务器已启动' if self.server_thread.isRunning() else '服务器已运行',
+            content=f'正在使用端口 {self.current_port}\n浏览器未自动打开？试试访问 http://localhost:{self.current_port}',
+            orient=Qt.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=3000,
+            parent=self
+        )
+
+    def closeEvent(self, event):
+        """窗口关闭时停止服务器"""
+        if self.server_thread and self.server_thread.isRunning():
+            self.server_thread.stop()
+            self.server_thread.quit()
+            self.server_thread.wait(1000)
+        super().closeEvent(event)
 
     def load_group_options(self):
         logger.debug("从 duty_list.json 加载组别选项")

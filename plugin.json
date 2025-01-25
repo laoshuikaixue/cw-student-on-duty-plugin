@@ -1,7 +1,7 @@
 {
     "name": "值日生插件",
     "description": "一个用于展示班级值日生信息的插件。",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "plugin_ver": 1,
     "author": "LaoShui",
     "settings": true,
@@ -9,5 +9,5 @@
     "url": "https://github.com/laoshuikaixue/cw-student-on-duty-plugin",
     "branch": "main",
 
-    "update_date": "2025/01/20"
+    "update_date": "2025/01/25"
 }

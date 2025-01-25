@@ -9,7 +9,8 @@ from PyQt5.QtCore import QUrl, pyqtSignal, QThread, Qt
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import QHBoxLayout, QLabel, QScrollBar, QScrollArea, QWidget, QVBoxLayout
 from loguru import logger
-from qfluentwidgets import ComboBox, PrimaryPushButton, InfoBar, InfoBarPosition
+from qfluentwidgets import ComboBox, PrimaryPushButton, Flyout, InfoBarIcon, \
+    FlyoutAnimationType
 from qfluentwidgets import isDarkTheme
 
 from .ClassWidgets.base import SettingsBase, PluginConfig, PluginBase
@@ -288,14 +289,14 @@ class Settings(SettingsBase):
 
     def on_server_error(self, msg):
         """服务器错误处理"""
-        InfoBar.error(
+        Flyout.create(
+            icon=InfoBarIcon.ERROR,
             title='服务器启动失败',
             content=msg,
-            orient=Qt.Horizontal,
-            isClosable=True,
-            position=InfoBarPosition.TOP,
-            duration=3000,
-            parent=self
+            target=self.openWebButton,  # 指定锚定按钮
+            parent=self,
+            aniType=FlyoutAnimationType.PULL_UP,
+            isClosable=True
         )
 
     def show_server_info(self):
@@ -303,14 +304,14 @@ class Settings(SettingsBase):
         if not self.current_port:
             return
 
-        InfoBar.success(
+        Flyout.create(
+            icon=InfoBarIcon.SUCCESS,
             title='服务器已启动' if self.server_thread.isRunning() else '服务器已运行',
-            content=f'正在使用端口 {self.current_port}\n浏览器未自动打开？试试访问 http://localhost:{self.current_port}',
-            orient=Qt.Horizontal,
-            isClosable=True,
-            position=InfoBarPosition.TOP,
-            duration=3000,
-            parent=self
+            content=f'正在使用端口 {self.current_port}\n浏览器未自动打开？试试访问: http://localhost:{self.current_port}',
+            target=self.openWebButton,  # 指定锚定在打开网页按钮
+            parent=self,
+            aniType=FlyoutAnimationType.PULL_UP,
+            isClosable=True
         )
 
     def closeEvent(self, event):

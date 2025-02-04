@@ -1,8 +1,10 @@
 import http.server
 import json
+import socket
 import socketserver
 from threading import Event
 
+import requests
 from PyQt5 import uic
 from PyQt5.QtCore import QPropertyAnimation, QEasingCurve, QTimer
 from PyQt5.QtCore import QUrl, pyqtSignal, QThread, Qt
@@ -204,8 +206,14 @@ class ServerThread(QThread):
     def run(self):
         """尝试启动服务器，遇到冲突时递增端口"""
         max_attempts = 100  # 最大尝试端口数量
+        initial_port = self.port
+
         for attempt in range(max_attempts):
             if self.stop_flag.is_set():
+                return
+
+            if self.port >= initial_port + max_attempts:
+                self.error_occurred.emit(f"无法找到可用端口 ({initial_port}-{self.port - 1})")
                 return
 
             try:
@@ -213,29 +221,49 @@ class ServerThread(QThread):
                 self.handler = lambda *args: http.server.SimpleHTTPRequestHandler(
                     *args, directory=self.path
                 )
+                # 先尝试创建一个测试服务器来检查端口是否可用
+                test_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                test_socket.settimeout(1)
+                result = test_socket.connect_ex(('localhost', self.port))
+                test_socket.close()
+
+                if result == 0:  # 端口被占用
+                    self.port_conflict.emit(self.port)
+                    self.port += 1
+                    continue
+
+                # 端口可用，创建实际的服务器
                 self.httpd = socketserver.TCPServer(("", self.port), self.handler)
+                self.httpd.socket.settimeout(1)  # 设置超时，使服务器能够响应停止信号
                 self.server_started.emit(self.port)
-                self.httpd.serve_forever()
+
+                # 持续运行服务器直到收到停止信号
+                while not self.stop_flag.is_set():
+                    try:
+                        self.httpd.handle_request()
+                    except socket.timeout:
+                        continue
                 break
-            except OSError as e:
-                if e.errno == 48 or "Address already in use" in str(e):
+
+            except Exception as e:
+                error_message = str(e).lower()
+                if "address already in use" in error_message or "already in use" in error_message:
                     self.port_conflict.emit(self.port)
                     self.port += 1
                 else:
                     self.error_occurred.emit(f"启动服务器失败: {str(e)}")
                     break
-            except Exception as e:
-                self.error_occurred.emit(f"未知错误: {str(e)}")
-                break
-        else:
-            self.error_occurred.emit("无法找到可用端口 (8900-9000)")
 
     def stop(self):
         """安全停止服务器"""
-        if self.httpd:
-            self.httpd.shutdown()
-            self.httpd.server_close()
         self.stop_flag.set()
+        if self.httpd:
+            try:
+                # 发送一个请求来解除 serve_forever 的阻塞
+                requests.get(f'http://localhost:{self.port}', timeout=0.1)
+            except:
+                pass  # 忽略连接错误
+            self.httpd.server_close()
 
 
 class Settings(SettingsBase):
@@ -293,7 +321,7 @@ class Settings(SettingsBase):
             icon=InfoBarIcon.ERROR,
             title='服务器启动失败',
             content=msg,
-            target=self.openWebButton,  # 指定锚定按钮
+            target=self.openWebButton,
             parent=self,
             aniType=FlyoutAnimationType.PULL_UP,
             isClosable=True
@@ -308,7 +336,7 @@ class Settings(SettingsBase):
             icon=InfoBarIcon.SUCCESS,
             title='服务器已启动' if self.server_thread.isRunning() else '服务器已运行',
             content=f'正在使用端口 {self.current_port}\n浏览器未自动打开？试试访问: http://localhost:{self.current_port}',
-            target=self.openWebButton,  # 指定锚定在打开网页按钮
+            target=self.openWebButton,
             parent=self,
             aniType=FlyoutAnimationType.PULL_UP,
             isClosable=True

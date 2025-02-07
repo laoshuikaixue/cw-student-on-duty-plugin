@@ -19,7 +19,7 @@ from .ClassWidgets.base import SettingsBase, PluginConfig, PluginBase
 
 # 自定义小组件
 WIDGET_CODE = 'duty_widget.ui'
-WIDGET_NAME = '值日生组件 | LaoShui'
+WIDGET_NAME = '值日生信息 | LaoShui'
 WIDGET_WIDTH = 245
 
 

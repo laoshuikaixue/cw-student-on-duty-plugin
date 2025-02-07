@@ -19,23 +19,31 @@ function loadStudentList() {
 }
 
 function addDuty() {
-    const category = document.getElementById('category').value;
-    const group = document.getElementById('group').value;
-    const name = document.getElementById('name').value;
+    const categorySelect = document.getElementById('category');
+    const groupSelect = document.getElementById('group');
+    const nameSelect = document.getElementById('name');
+
+    const category = categorySelect.value;
+    const group = groupSelect.value;
+    const name = nameSelect.value;
 
     if (category && group && name) {
-        const tbody = document.getElementById('dutyList');
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${category}</td>
-            <td>${group}</td>
-            <td>${name}</td>
-            <td>
-                <button class="btn btn-delete" onclick="deleteDuty(this)">删除</button>
-            </td>`;
-        tbody.appendChild(row);
+      const tbody = document.getElementById('dutyList');
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${category}</td>
+        <td>${group}</td>
+        <td>${name}</td>
+        <td>
+          <button class="btn btn-delete" onclick="deleteDuty(this)">删除</button>
+        </td>`;
+      tbody.appendChild(row);
+
+      // 自动增加类别，若到达最后则回到头部
+      const nextIndex = (categorySelect.selectedIndex + 1) % categorySelect.options.length;
+      categorySelect.selectedIndex = nextIndex;
     } else {
-        alert('请填写所有字段');
+      alert('请填写所有字段');
     }
 }
 
